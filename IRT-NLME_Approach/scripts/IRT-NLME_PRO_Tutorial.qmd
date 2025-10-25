@@ -1,0 +1,418 @@
+---
+title: "IRT Tutorial"
+format:
+  html:
+    toc: true
+---
+
+# Set up
+
+```{r}
+#| echo: true
+#| warning: false
+#| message: false
+# gc()
+rm(list=ls())
+
+library(tidyverse)
+library(piraid)
+library(ggh4x)
+library(xpose)
+
+data_dir <- "../data"
+nonmem_dir <- "../models"
+output_dir <- "../outputs"
+```
+
+# Data 
+
+Some links to the study details from which these data were taken from are as follows. 
+
+- https://clinicaltrials.gov/study/NCT00081796?tab=table
+- https://www.sanofi.com/assets/dotcom/content-app/clinical-studies/pharma/Letter-L/EFC6089_summary.pdf
+
+Note that the data includes only control arm data. 
+We will first do some data management to get the data ready for exploratory data analyses.
+```{r}
+#| echo: true
+#| warning: false
+#| message: false
+# load data and perform some data wrangling (add grouping, add numeric columns for categorical variables)
+dat = read.csv(file.path(data_dir, "EQLQ_Clean_2004_23JUN2025.csv"),
+                 stringsAsFactors = F, na.string=c(".","NA","")) %>%
+      select(UID, ID, ITEM=FLAG, TIME, TAFR, DV, everything())  %>%
+      mutate(STUDYN = as.numeric(as.factor(NCT)),
+             SEXN = as.numeric(as.factor(SEX)),
+             ECOG = ifelse(ECOG=="0", 0, ifelse(ECOG=="1", 1, NA)),
+             MENOSN = as.numeric(as.factor(MENOS)),
+             CHEMO = ifelse(CHEMO=="Y", 1, ifelse(CHEMO=="N", 0, NA)),
+             SURGERY = ifelse(SURGERY=="Y", 1, ifelse(SURGERY=="N", 0, NA)),
+             RADIO = ifelse(RADIO=="Y", 1, ifelse(RADIO=="N", 0, NA)),
+             ERS = ifelse(ERS=="Positive",1, ifelse(ERS=="Negative", 0, NA)),
+             PGRS = ifelse(PGRS=="Positive",1, ifelse(PGRS=="Negative", 0, NA)),
+             MHDEPRESSION = ifelse(MHDEPRESSION=="Y", 1, ifelse(MHDEPRESSION=="N", 0, NA)),
+             MDANXIETY =  ifelse(MDANXIETY=="Y", 1, ifelse(MDANXIETY=="N", 0, NA)),
+             ITMGRP = ifelse(ITEM %in% 1:5, "Physical Function",
+                       ifelse(ITEM %in% 6:7, "Role Function",
+                       ifelse(ITEM %in% c(20,25), "Cognitive Function",
+                       ifelse(ITEM %in% 21:24, "Emotional Function",
+                       ifelse(ITEM %in% c(26,27), "Social Function",
+                       ifelse(ITEM %in% 8:19, "Symptoms", 
+                       ifelse(ITEM %in% 28, "Financial Difficulties",
+                       ifelse(ITEM %in% 29:30, "Global Health Status", NA)))))))),
+             ITMGRPN = as.numeric(as.factor(ITMGRP)))
+```
+
+## Explore data 
+The purpose of the first set of data explorations is to plan data cleaning steps.
+
+```{r}
+#| echo: true
+#| warning: false
+#| message: false
+# All items all timepoints
+ggplot(dat,aes(x=TIME, y=DV)) +
+  geom_line(aes(group=ID), color="grey", size=0.5) +
+  facet_wrap(~ITEM, scales="free") +
+  geom_smooth(method="lm") + ylab("Item Score") + xlab("Time (Wk)") +
+  theme_bw()
+
+# Check data points per time
+tabdat <- dat %>%
+    group_by(TIME, ITEM) %>%
+    summarize(N= n()) %>%
+    ungroup() %>%
+    arrange(desc(N), TIME, ITEM)
+
+# Check data points per time (just filtering one item to check sample size over time)
+tabdat <- dat %>%
+    filter(ITEM==1) %>%
+    group_by(TIME, ITEM) %>%
+    summarize(N= n()) %>%
+    ungroup() %>%
+    arrange(desc(N), TIME, ITEM) 
+
+ggplot(tabdat, aes(x=TIME, y=N)) + 
+  geom_point() +  
+  theme_bw()
+```
+
+The major part of the datapoints are within -1 week through 100 days. Let's use data upto 1 year only.
+We will also remove items financial difficulty (28) and global score (29 and 30). Also, we convert time in days to weeks. Keep only one timepoint per patient and ITEM per week.
+
+## Additional data cleaning and wrangling
+
+```{r}
+#| echo: true
+#| warning: false
+#| message: false
+# Filter up to 1 year data 
+dat <- dat %>%
+  filter(ITEM < 28) %>%
+  filter(TIME >= -7, TIME <= 365) %>% 
+  mutate(WEEK = floor(TIME/7)) %>%
+  group_by(ID, WEEK, ITEM) %>%       
+  slice(1) %>% ungroup() %>%
+  mutate(OID=ID, ID =as.numeric(factor(OID)), DAY=TIME) %>%
+  select(ID, DAY, TIME=WEEK, ITEM, everything(), -TIME) %>%
+  arrange(ID, TIME, ITEM)
+
+## Remove time points where items are missing per ID and TIME (keeping)
+rmvdat <- dat %>%
+  group_by(ID, TIME) %>%
+  summarize(NITEM = n()) %>%
+  ungroup() %>%
+  filter(NITEM != 27)
+
+# Filtered data 
+datN <- anti_join(dat, rmvdat, by = c("ID", "TIME"))
+
+# Check removed data
+knitr::kable(rmvdat, caption="List of ignored/removed data points")
+
+length(unique(rmvdat$ID))
+
+# Check N IDs
+length(unique(datN$ID))
+
+# Write full data version
+write.csv(datN, 
+          file.path(data_dir, "Analysis_Data_Full.csv"), 
+          row.names = F, na=".", quote=F) 
+
+## filter columns only for nonmem
+datnm1 <- datN %>% select(ID, TIME, DAY, ITEM, DV)
+datnm2 <- datN %>% select(ID, TIME, DAY, ITEM, DV, AGE, MENOSN, LESION1, ECOG,
+                          CHEMO, SURGERY, RADIO, ERS, PGRS, MHDEPRES=MHDEPRESSION,
+                          MDANXIET=MDANXIETY, WEIGHT, PFS, ITMGRPN)
+
+## Write only nm data version
+write.csv(datnm1,
+          file.path(data_dir, "Analysis_Data_nm.csv"),
+          row.names = F, na=".", quote=F)
+
+## Write only nm data version
+write.csv(datnm2,
+          file.path(data_dir, "Analysis_Data_nm_wCov.csv"),
+          row.names = F, na=".", quote=F)
+```
+
+## Explore clean data 
+
+```{r}
+#| echo: true
+#| warning: false
+#| message: false
+# All data
+ggplot(datN,aes(x=TIME, y=DV)) +
+  geom_line(aes(group=ID), color="grey", size=0.5) +
+  facet_wrap(~ITEM, scales="free") +
+  geom_smooth(method="lm") +
+  ylab("Item Score") + xlab("Time (Wk)") +
+  theme_bw()
+```
+
+# IRT Modeling
+
+We will use piraid library (Check https://github.com/UUPharmacometrics/piraid for more details). 
+
+Also, review the following references to learn more about pharmacometrics IRT modeling.
+
+- https://pmc.ncbi.nlm.nih.gov/articles/PMC5915608/
+- https://www.page-meeting.org/?abstract=8869
+- https://pubmed.ncbi.nlm.nih.gov/28247193/
+
+## Load scale
+```{r}
+#| echo: true
+#| warning: false
+#| message: false
+
+# Prepare scale using piraid function and our data
+# scale <- create_scale_from_df(dat)
+# save_scale(scale, "EORTC_QOLE30_auto.yaml")
+# scale
+
+# load scale with piraid 
+# this scale was manually prepared
+scale = load_scale("EORTC_QOLE27.yaml")
+
+# Check data 
+check_data(dat, scale)
+```
+
+## Create and run item-response model (Base Model)
+
+```{r}
+#| echo: true
+#| warning: false
+#| message: false
+
+# Model file creation 
+model = irt_model(scale) %>%
+  set_dataset(file.path(data_dir, "Analysis_Data_nm.csv"), use_path = TRUE)
+
+## Initial estimates for the item parameters
+item_prms = estimate_item_parameters(model, "all-baseref") 
+model = model %>% update_parameters(., item_prms) 
+
+### Only need to save the first time this is run (else it will be overwritten)
+## Save model as nonmem file
+# save_model_code(model, file.path(nonmem_dir, "run1.mod"))
+```
+
+Run nonmem model using PsN: execute run1.mod -clean=5
+
+## Review item parameters 
+
+```{r, fig.width=10, fig.height=10}
+#| echo: true
+#| warning: false
+#| message: false
+
+# Read estimated parameters from run1
+item_prms <- read_item_parameters_from_nmtab(model, 
+                                             file.path(nonmem_dir, "irt_tab1"))
+
+# Plot ICCs from run1
+P1 <- plot_iccs(model)
+P1$data$item  <- gsub(":", "\n ", P1$data$item)
+P1 + ggh4x::facet_wrap2(~item, ncol=5) +
+  theme_bw() +
+  theme(strip.text.x = element_text(size = 7),
+        axis.ticks.length = unit(-2.75, "pt"),
+        axis.text.x.bottom = element_text(),
+        axis.text.y.left = element_text(),
+        legend.position = "bottom", legend.box="horizontal") + 
+  guides(color = guide_legend(nrow = 2, byrow = TRUE))
+
+
+#Plot Information Content from ICCs from run1
+iteminfo <- calculate_population_item_information(model, mean=0, var=1) %>%
+      mutate(item = fct_reorder(item, information)) %>%
+      mutate(Group = sub(":.*", "", item))
+             
+P2 <- ggplot(data=iteminfo, aes(x=item, y=information, fill=Group)) + 
+       geom_col(alpha=0.5) +
+       xlab(NULL) +
+       ylab("Information") +
+       coord_flip() +
+       theme_bw() +
+       theme(legend.position = "bottom") + 
+       guides(fill = guide_legend(nrow = 6, byrow = TRUE))
+P2
+```
+
+# NLME Modeling of PSI
+
+```{r}
+#| echo: true
+#| warning: false
+#| message: false
+
+# To create a new model (run2), first fix all IRT parameters to run1 estimates
+model = model %>% update_parameters(., item_prms) %>% fix_all_item_parameters(.)
+
+### Save updated model with fixed item parameters as run2 for NLME
+## Only need to save the first time this is run (else it will be overwritten)
+# save_model_code(model, file.path(nonmem_dir, "run2.mod"))
+```
+
+We will now perform NLME modeling with IRT-predicted PSI (latent variable, disease state) change over time. We will add the following linear time effect model in run2. We will use the simplest additive random effect model. Other types of models can be evaluated, too. Also, we will change $TABLE FILE names to irt_tab2 and prob_tab2 manually.
+
+$$  BasePSI = THETA(109) + ETA(1) $$
+$$ TMSLP = THETA(110) + ETA(2) $$
+$$ PSI = BasePSI + TMSLP*TIME $$
+
+
+Now, run execute run2.mod -clean=5 using PsN
+Check summary of model output, i.e., parameter estimates, using sumo run2.lst
+
+## Diagnostics
+```{r}
+#| echo: true
+#| warning: false
+#| message: false
+
+df1 <- read.table(file.path(nonmem_dir, "irt_tab2"),
+                  skip=1, header=T, sep=c("", ","))
+df2 <- read.table(file.path(nonmem_dir, "prob_tab2"),
+                  skip=1, header=T, sep=c("", ","))
+
+# Forgot to output covariates in nonmem model so just merging here
+df <- full_join(df1, df2) %>%
+          full_join(., datnm2)
+
+icc_plots(model, df, items_per_page=2, resample_psi=TRUE, samples=10) 
+
+
+diagnose_marginal_probability(model, simdata=df1, nrow = 3, ncol = 3)
+```
+
+## PSI vs. Covariates 
+
+Let's visualize PSI changes over time and as a function of covariates.
+
+```{r}
+#| echo: true
+#| warning: false
+#| message: false
+
+# PSI vs. TIME
+P3 <- ggplot(data=df, aes(x=TIME, y=PSI)) +
+       geom_line(aes(group=ID)) +
+       xlab("Time (Wk)") +
+       ylab("PSI") +
+       theme_bw() 
+P3
+
+# Baseline PSI vs. continuous covariates 
+plotdat <- df %>%
+  filter(TIME==0, ITEM==1) %>%
+  group_by(ID) %>%
+  slice(1) %>% ungroup() %>%
+  tidyr::gather(c("AGE", "LESION1", "WEIGHT"), key="key", value="value") %>%
+  ungroup()
+
+P4 <- ggplot(data=plotdat, aes(x=value, y=PSI)) +
+       geom_point(shape=1) +
+       xlab("") +
+       ylab("PSI") +
+       facet_wrap(~key, scales="free") +
+       geom_smooth(method="lm") +
+       theme_bw()
+P4
+
+# Baseline PSI vs. categorical covariates
+plotdat <- df %>%
+  group_by(ID) %>%
+  slice(1) %>% ungroup() %>%
+  tidyr::gather(c("CHEMO", "SURGERY", "RADIO",
+                   "ERS", "PGRS", "MHDEPRES", "MDANXIET",
+                   "MENOSN", "PFS"), key="key", value="value") %>%
+  ungroup()
+
+P5 <- ggplot(data=plotdat, aes(x=factor(value), y=PSI)) +
+       geom_boxplot() +
+       xlab("") +
+       ylab("PSI") +
+       facet_wrap(~key, scales="free") +
+       theme_bw()
+P5
+
+# Check correlations between AGE, WEIGHT, and LESION1
+corr <- round(cor(df %>%
+  filter(TIME==0, ITEM==1) %>%
+  group_by(ID) %>%
+  slice(1) %>% 
+  ungroup()%>%
+  select(AGE,LESION1,WEIGHT)), 2) 
+corr
+# Only very weak correlations
+```
+
+## Add age as a continuous covariate on baseline PSI in run3
+
+update_inits run2.mod run2.lst -output_model=run3.mod
+
+Based on the review of covariate plots, let's test addition of age as a covarite on baseline PSI (linear model). Lowest age is 30 in the dataset. We will input dataset to Analysis_Data_nm_wCov.csv in run2. Now, we will update run3.mod PSI model manually. 
+
+$$ BasePSI = THETA(109) + ETA(1) $$
+$$ BasePSIAGE = BasePSI * (1 + THETA(111)*(AGE-30)) $$
+$$ TMSLP = THETA(110) + ETA(2) $$
+$$ PSI = BasePSIAGE + TMSLP*TIME $$
+
+Upon running run3, dOFV from run2 = -2.67 ~ not significant. We could evaluate other covariates, too. For the purpose of this tutorial, consider run2 as the final model. 
+
+## VPCs
+### Total score prediction corrected
+Run VPC using command vpc run2vpc.mod -flip_comments -samples=500 -dir=vpc2 -predcorr
+```{r, message=FALSE, warning=FALSE}
+#| echo: true
+#| warning: false
+#| message: false
+
+vpcdat <- xpose::vpc_data(xpdb_ex_pk, 
+                          psn_folder="../models/vpc2",
+                          psn_bins=T)
+
+P1 <- vpc(vpcdat, smooth =T, type="alr") + 
+  xlab("Time (Wk)") +
+  theme_bw() 
+P1
+```
+
+### Categorical prediction corrected
+Run VPC using command vpc run2vpc.mod -flip_comments -samples=500 -dir=vpc2.1 -predcorr -levels=0,1,2,3,4
+```{r, message=FALSE, warning=FALSE}
+
+# Categorical
+vpcdat <- xpose::vpc_data(xpdb_ex_pk, vpc_type = "categorical",
+                          psn_folder="../models/vpc2.1",
+                          psn_bins=T)
+
+P2 <- vpc(vpcdat, smooth =T, type="alr") + 
+  xlab("Time (Wk)") +
+  theme_bw() 
+P2
+```
