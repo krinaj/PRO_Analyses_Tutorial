@@ -1,0 +1,29 @@
+Variable,Definition,Unit,Notes
+UID,unique subject identifier,,
+ID,subject identifier for the study,,
+STDID,Study ID,,"Label by 2001, 1997, 2000, 2004 (year of study)"
+NCT,NCT Trial ID,,"2004 study NCT00081796, 1997 study NCT00688740, 2000 study NCT00312208, 2001 study NCT00046527"
+QSFLAG,FLAG for each measurement,,
+FLAG,"Numeric FLAG for measurement, 1-30 for question 1-30",,
+TIME,Time of the question measured,day,
+TAFR,Time of the first record,day,
+DV,"Numeric measurement result, 1 = Not at all, 2 = A little, 3 = Quite a bit, 4 = Very much, ""."" = -999",,01-28: 1-4? 29-30:1-7 (order opposite)
+AGE,Baseline age,,
+SEX,,,
+RACE,"Baseline 1 = White, 2 = BLACK OR AFRICAN AMERICAN, 3 = ASIAN / PACIFIC ISLANDER, 4 = LATINO/HISPANIC, 5 = OTHER",,Keep the number because the text is too long
+MENOS,"Baseline Menopausal status,change to text, premenopausal/postmenopausal/UNK",,
+LESION1,Baseline Number of target lesion,,
+ECOG,"Baseline ECOG status, label as text, 0/1/2-3",,
+CHEMO,"Baseline Prior chemotherapy, change to text, Y/N/UNK",,
+SURGERY,"Baseline Surgery history, change to text, Y/N/UNK",,
+RADIO,"Baseline radiotherapy, change to text, Y/N/UNK",,
+ERS,"Initial ER status,  change to text, Positive/Negative/UNK",,
+PGRS,"Initial PgR status, change to text, Positive/Negative/UNK",,
+MHDEPRESSION,"Baseline Previous medical history has depression, change to text, Y/N/UNK",,
+MDANXIETY,"Baseline Previous medical history has anxiety, change to text, Y/N/UNK",,
+HEIGHT," baseline Height, missing = -999",,
+WEIGHT,"baseline body weight, missing = -999",,
+DTHDY,"Death day, missing = -999",,
+DTH,"Survival status, 1= Death, 0 = Censored, -999 = missing",,
+PFSDY,"progression free survival, missing = -999",,
+PFS,"disease progression status,1=Disease progression, 0 = Censored, missing = -999",,
