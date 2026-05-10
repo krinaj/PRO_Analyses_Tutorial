@@ -1,0 +1,60 @@
+$Run
+[1] "run9"
+
+$AnalysisStepID
+NULL
+
+$EstimationMethod
+[1] "Stochastic Approximation Expectation-Maximization (No Prior)"   
+[2] "Objective Function Evaluation by Importance Sampling (No Prior)"
+
+$Minimisation
+[1] "STOCHASTIC PORTION WAS COMPLETED                  "
+[2] "EXPECTATION ONLY PROCESS WAS COMPLETED            "
+
+$CovarianceStep
+[1] "Passed"
+
+$Dimensions
+# A tibble: 1 × 3
+   nobs   nid  npar
+  <dbl> <dbl> <int>
+1  1267   199     8
+
+$ObjectiveFunctionValue
+# A tibble: 1 × 3
+    OFV   AIC   BIC
+  <dbl> <dbl> <dbl>
+1 4755. 4771. 4812.
+
+$ConditionNumber
+[1] 8.271227
+
+$Theta
+  Number Name    Value  RSE
+1 THETA1 BASE     1.67 2.52
+2 THETA2 PMAX     0.38 38.2
+3 THETA3 KPBO  0.00759 42.5
+4 THETA4 KDIS 0.000342 72.4
+5 THETA5  PHI     20.1 11.1
+
+$Omega
+      Number    Name Value    SD  RSE Shrinkage
+1 OMEGA(1,1) IIVBASE 0.967 0.983 14.9         7
+2 OMEGA(2,2) IIVPMAX  1.05  1.03 48.9      38.3
+3 OMEGA(3,3) IIVKDIS  3.45  1.86 37.2      51.5
+
+$Covariance
+      Number       Name Value Corr RSE
+1 OMEGA(2,1) RBASE-PMAX     0    0 FIX
+2 OMEGA(3,1) RBASE-KDIS     0    0 FIX
+3 OMEGA(3,2) RPMAX-KDIS     0    0 FIX
+
+$Sigma
+      Number   Name Value SD RSE Shrinkage
+1 SIGMA(1,1) ERRRES     0  0 FIX         0
+
+$SigmaCov
+                     Value
+1 No off-diagonal elements
+
